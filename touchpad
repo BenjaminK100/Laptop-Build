@@ -1,2 +1,9 @@
-touchpad
+the files need for updatinf the firmare https://www.azoteq.com/design/software-and-tools/
+i found this to add to pi cm5 u need to go to a dif dir /boot/firmware.config.txt
+https://www.azoteq.com/wp-content/uploads/2022/02/Trackpad-for-raspberry-pi.pdf?utm_source=chatgpt.com
+using 5 cables conncet to pi 3 v ground Sda and scl and rdy
+-- still in proges need to update the firmware as rigt now the pi can see the touchpad and the drivers are working>
+am using evtest to test
+
+
 
