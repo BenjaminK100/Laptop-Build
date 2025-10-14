@@ -5,5 +5,5 @@ using 5 cables conncet to pi 3 v ground Sda and scl and rdy
 -- still in proges need to update the firmware as rigt now the pi can see the touchpad and the drivers are working>
 am using evtest to test
 
-
+having trouble getting hex will need to find a way to get download the hex then use a python scrigpht to send it over sda and scl cables to the touchpad it self updating its firmware as I dont have the fancy adter then can connect it to a windows pc
 
