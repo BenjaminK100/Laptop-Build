@@ -7,3 +7,133 @@ am using evtest to test
 
 having trouble getting hex will need to find a way to get download the hex then use a python scrigpht to send it over sda and scl cables to the touchpad it self updating its firmware as I dont have the fancy adter then can connect it to a windows pc
 
+#include <Wire.h>
+
+#define RDY_PIN    2
+#define RST_PIN    3
+#define I2C_ADDR   0x74
+#define END_WINDOW 0xEEEE
+
+uint8_t Data_Buff[44];
+
+void RDY_wait() {
+  while(digitalRead(RDY_PIN) == LOW) {
+    // wait for HIGH
+  }
+}
+
+void Close_Comms() {
+  Wire.beginTransmission(I2C_ADDR);
+  Wire.write(0xEE);
+  Wire.write(0xEE);
+  Wire.endTransmission();
+}
+
+void IQS5xx_AcknowledgeReset() {
+  uint8_t data;
+  Wire.beginTransmission(I2C_ADDR);
+  Wire.write(0x00); Wire.write(0x0F);  // SystemInfo0
+  Wire.endTransmission(false);
+  Wire.requestFrom(I2C_ADDR, 1);
+  data = Wire.read();
+
+  if(data & 0x80) {  // SHOW_RESET bit
+    Wire.beginTransmission(I2C_ADDR);
+    Wire.write(0x04); Wire.write(0x31);  // SystemControl0
+    Wire.write(0x80);                     // ACK_RESET
+    Wire.endTransmission();
+  }
+  Close_Comms();
+}
+
+void IQS5xx_CheckVersion() {
+  uint8_t d[7];
+  Wire.beginTransmission(I2C_ADDR);
+  Wire.write(0x00); Wire.write(0x00);
+  Wire.endTransmission(false);
+  Wire.requestFrom(I2C_ADDR, 7);
+  for(int i = 0; i < 7; i++) d[i] = Wire.read();
+  Close_Comms();
+
+  Serial.print("ProductNum : 0x"); Serial.println(d[0], HEX);
+  Serial.print("MajorVer   : 0x"); Serial.println(d[2], HEX);
+  Serial.print("MinorVer   : 0x"); Serial.println(d[3], HEX);
+  Serial.print("BootStatus : 0x"); Serial.println(d[6], HEX);
+  if(d[6] == 0xA5) Serial.println(">>> BOOTLOADER active!");
+  else if(d[6] == 0x00) Serial.println(">>> Firmware running!");
+}
+
+void Process_XY() {
+  uint8_t fingers   = Data_Buff[4];  // NoOfFingers
+  uint8_t gesture0  = Data_Buff[0];  // GestureEvents0
+  uint8_t gesture1  = Data_Buff[1];  // GestureEvents1
+  uint8_t sysInfo0  = Data_Buff[2];  // SystemInfo0
+  uint16_t absX     = ((uint16_t)Data_Buff[9]  << 8) | Data_Buff[10];
+  uint16_t absY     = ((uint16_t)Data_Buff[11] << 8) | Data_Buff[12];
+  uint16_t relX     = ((uint16_t)Data_Buff[5]  << 8) | Data_Buff[6];
+  uint16_t relY     = ((uint16_t)Data_Buff[7]  << 8) | Data_Buff[8];
+
+  // Check for reset
+  if(sysInfo0 & 0x80) {
+    Serial.println("Reset detected — re-acking...");
+    IQS5xx_AcknowledgeReset();
+    return;
+  }
+
+  if(fingers > 0) {
+    Serial.print("Fingers:"); Serial.print(fingers);
+    Serial.print(" AbsX:"); Serial.print(absX);
+    Serial.print(" AbsY:"); Serial.print(absY);
+    Serial.print(" RelX:"); Serial.print((int16_t)relX);
+    Serial.print(" RelY:"); Serial.print((int16_t)relY);
+
+    // Gestures
+    if(gesture0 & 0x01) Serial.print(" [TAP]");
+    if(gesture0 & 0x02) Serial.print(" [HOLD]");
+    if(gesture0 & 0x04) Serial.print(" [SWIPE←]");
+    if(gesture0 & 0x08) Serial.print(" [SWIPE→]");
+    if(gesture0 & 0x10) Serial.print(" [SWIPE↑]");
+    if(gesture0 & 0x20) Serial.print(" [SWIPE↓]");
+    if(gesture1 & 0x01) Serial.print(" [2-FINGER TAP]");
+    if(gesture1 & 0x02) Serial.print(" [SCROLL]");
+    if(gesture1 & 0x04) Serial.print(" [ZOOM]");
+    Serial.println();
+  } else {
+    Serial.println("No touch");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+
+  pinMode(RDY_PIN, INPUT);
+  pinMode(RST_PIN, OUTPUT);
+  digitalWrite(RST_PIN, LOW); delay(50);
+  digitalWrite(RST_PIN, HIGH);
+  delay(200);
+
+  Wire.begin();
+  Wire.setClock(400000);
+
+  Serial.println("Waiting for RDY...");
+  RDY_wait();
+  Serial.println("RDY!");
+
+  IQS5xx_AcknowledgeReset();
+  IQS5xx_CheckVersion();
+}
+
+void loop() {
+  RDY_wait();
+
+  // Read 44 bytes from GestureEvents0 (0x000D) exactly like Azoteq example
+  Wire.beginTransmission(I2C_ADDR);
+  Wire.write(0x00); Wire.write(0x0D);
+  Wire.endTransmission(false);
+  Wire.requestFrom(I2C_ADDR, 44);
+  for(int i = 0; i < 44; i++) Data_Buff[i] = Wire.read();
+
+  Close_Comms();
+  Process_XY();
+}
